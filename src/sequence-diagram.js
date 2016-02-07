@@ -3,8 +3,6 @@
  *  (c) 2012-2013 Andrew Brampton (bramp.net)
  *  Simplified BSD license.
  */
-(function () {
-	"use strict";
 	/*global Diagram, Raphael, _ */
 
 	// Following the CSS convention
@@ -507,8 +505,8 @@
 					if (note.hasManyActors()) {
 						var bX = getCenterX( note.actor[1] );
 						var overlap = NOTE_OVERLAP + NOTE_PADDING;
-						note.x = aX - overlap;
-						note.width = (bX + overlap) - note.x;
+						note.x = Math.min(aX,bX) - overlap;
+						note.width = (Math.max(aX,bX) + overlap) - note.x;
 					} else {
 						note.x = aX - note.width / 2;
 					}
@@ -640,4 +638,3 @@
 
 	}; // end of drawSVG
 
-}());

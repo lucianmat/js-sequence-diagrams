@@ -3,8 +3,6 @@
  *  (c) 2012-2013 Andrew Brampton (bramp.net)
  *  Simplified BSD license.
  */
-(function () {
-	"use strict";
 	/*global grammar _ */
 
 	function Diagram() {
@@ -13,24 +11,38 @@
 		this.signals = [];
 	}
 
-	Diagram.prototype.getActor = function(alias) {
-		var s = /^(.+) as (\S+)$/i.exec(alias.trim());
-		if (s) {
-			name  = s[1].trim();
-			alias = s[2].trim();
-		} else {
-			name = alias.trim();
-		}
-
-		name = name.replace(/\\n/gm, "\n");
+	/*
+	 * Return an existing actor with this alias, or creates a new one with alias and name.
+	 */
+	Diagram.prototype.getActor = function(alias, name) {
+		alias = alias.trim();
 
 		var i, actors = this.actors;
 		for (i in actors) {
 			if (actors[i].alias == alias)
 				return actors[i];
 		}
-		i = actors.push( new Diagram.Actor(alias, name, actors.length) );
+		i = actors.push( new Diagram.Actor(alias, (name || alias), actors.length) );
 		return actors[ i - 1 ];
+	};
+
+	/*
+	 * Parses the input as either a alias, or a "name as alias", and returns the corresponding actor.
+	 */
+	Diagram.prototype.getActorWithAlias = function(input) {
+		input = input.trim();
+
+		// We are lazy and do some of the parsing in javascript :(. TODO move into the .jison file.
+		var s = /([\s\S]+) as (\S+)$/im.exec(input);
+		var alias, name;
+		if (s) {
+			name  = s[1].trim();
+			alias = s[2].trim();
+		} else {
+			name = alias = input;
+		}
+
+		return this.getActor(alias, name);
 	};
 
 	Diagram.prototype.setTitle = function(title) {
@@ -75,6 +87,11 @@
 		return _.isArray(this.actor);
 	};
 
+	Diagram.unescape = function(s) {
+		// Turn "\\n" into "\n"
+		return s.trim().replace(/^"(.*)"$/m, "$1").replace(/\\n/gm, "\n");
+	};
+
 	Diagram.LINETYPE = {
 		SOLID  : 0,
 		DOTTED : 1
@@ -91,11 +108,32 @@
 		OVER    : 2
 	};
 
-	/** The following is included by jspp */
-	/*> ../build/grammar.js */
+
+	// Some older browsers don't have getPrototypeOf, thus we polyfill it
+	// https://github.com/bramp/js-sequence-diagrams/issues/57
+	// https://github.com/zaach/jison/issues/194
+	// Taken from http://ejohn.org/blog/objectgetprototypeof/
+	if ( typeof Object.getPrototypeOf !== "function" ) {
+		/* jshint -W103 */
+		if ( typeof "test".__proto__ === "object" ) {
+			Object.getPrototypeOf = function(object){
+				return object.__proto__;
+			};
+		} else {
+			Object.getPrototypeOf = function(object){
+				// May break if the constructor has been tampered with
+				return object.constructor.prototype;
+			};
+		}
+		/* jshint +W103 */
+	}
+
+	/** The following is included by preprocessor */
+	// #include "build/grammar.js"
 
 	/**
-	 * jison doesn't have a good exception, so we make one
+	 * jison doesn't have a good exception, so we make one.
+	 * This is brittle as it depends on jison internals
 	 */
 	function ParseError(message, hash) {
 		_.extend(this, hash);
@@ -106,17 +144,20 @@
 	ParseError.prototype = new Error();
 	Diagram.ParseError = ParseError;
 
-	grammar.parseError = function(message, hash) {
-		throw new ParseError(message, hash);
-	};
-
 	Diagram.parse = function(input) {
-		grammar.yy = new Diagram();
+		// Create the object to track state and deal with errors
+		parser.yy = new Diagram();
+		parser.yy.parseError = function(message, hash) {
+			throw new ParseError(message, hash);
+		};
 
-		return grammar.parse(input);
+		// Parse
+		var diagram = parser.parse(input);
+
+		// Then clean up the parseError key that a user won't care about
+		delete diagram.parseError;
+		return diagram;
 	};
 
-	// Expose this class externally
-	this.Diagram = Diagram;
 
-}).call(this);
+

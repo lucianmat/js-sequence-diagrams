@@ -13,9 +13,9 @@
 
 %%
 
-[\n]+             return 'NL';
+[\r\n]+           return 'NL';
 \s+               /* skip whitespace */
-\#[^\n]*          /* skip comments */
+\#[^\r\n]*        /* skip comments */
 "participant"     return 'participant';
 "left of"         return 'left_of';
 "right of"        return 'right_of';
@@ -23,12 +23,13 @@
 "note"            return 'note';
 "title"           return 'title';
 ","               return ',';
-[^\->:\n,]+       return 'ACTOR';
+[^\->:,\r\n"]+    return 'ACTOR';
+\"[^"]+\"         return 'ACTOR';
 "--"              return 'DOTLINE';
 "-"               return 'LINE';
 ">>"              return 'OPENARROW';
 ">"               return 'ARROW';
-:[^#\n]+          return 'MESSAGE';
+:[^\r\n]+         return 'MESSAGE';
 <<EOF>>           return 'EOF';
 .                 return 'INVALID';
 
@@ -39,7 +40,7 @@
 %% /* language grammar */
 
 start
-	: document 'EOF' { return yy; }
+	: document 'EOF' { return yy.parser.yy; } /* returning parser.yy is a quirk of jison >0.4.10 */
 	;
 
 document
@@ -53,10 +54,10 @@ line
 	;
 
 statement
-	: 'participant' actor  { $2; }
-	| signal               { yy.addSignal($1); }
-	| note_statement       { yy.addSignal($1); }
-	| 'title' message      { yy.setTitle($2);  }
+	: 'participant' actor_alias { $2; }
+	| signal               { yy.parser.yy.addSignal($1); }
+	| note_statement       { yy.parser.yy.addSignal($1); }
+	| 'title' message      { yy.parser.yy.setTitle($2);  }
 	;
 
 note_statement
@@ -80,7 +81,11 @@ signal
 	;
 
 actor
-	: ACTOR { $$ = yy.getActor($1); }
+	: ACTOR { $$ = yy.parser.yy.getActor(Diagram.unescape($1)); }
+	;
+
+actor_alias
+	: ACTOR { $$ = yy.parser.yy.getActorWithAlias(Diagram.unescape($1)); }
 	;
 
 signaltype
@@ -99,7 +104,7 @@ arrowtype
 	;
 
 message
-	: MESSAGE { $$ = $1.substring(1).trim().replace(/\\n/gm, "\n"); }
+	: MESSAGE { $$ = Diagram.unescape($1.substring(1)); }
 	;
 
 
